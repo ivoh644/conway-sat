@@ -1,0 +1,15 @@
+# Ignore Python virtual environment
+.venv/
+venv/
+
+# Byte-compiled / cache files
+__pycache__/
+*.pyc
+
+# Editor/IDE files
+.vscode/
+.idea/
+
+# OS junk
+Thumbs.db
+.DS_Store
