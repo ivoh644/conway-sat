@@ -327,7 +327,7 @@ class TreeVisualizer:
                 else:
                     print("No more ancestors (thread). Backtracking...")
                     # with a probability of 33%, chose a random number between 1 and edpth and backtrack that many steps
-                    if random.random() < 0.33:
+                    if random.random() < 0.15:
                         steps = random.randint(1, self.current_node.depth)
                         print(f"Backtracking {steps} steps (thread)")
                         for _ in range(steps):
