@@ -5,6 +5,7 @@ import datetime
 import threading
 import time
 from game_of_life import GameOfLife
+import random
 from sat_solver import solve_initial_for_target, solve_initial_minimal_iterative
 
 CELL = 10
@@ -290,13 +291,13 @@ class TreeVisualizer:
                 
                 # USER logic: If more than 4 children, backtrack
                 if len(node.children) > 4:
-                    print("⏩ Too many branches, backtracking...")
+                    print("Too many branches, backtracking...")
                     if node.parent:
                         self.current_node = node.parent
                         self.game.grid = self.current_node.grid.copy()
                         continue
                     else:
-                        print("🏁 Already at root, stopping search.")
+                        print("Already at root, stopping search.")
                         self.searching = False
                         break
                 
@@ -318,16 +319,17 @@ class TreeVisualizer:
                 if not self.searching: break # Search was stopped while solving
                 
                 if ancestor is not None:
-                    print("✅ Found ancestor (thread)!")
+                    print("Found ancestor (thread)!")
                     new_node = self.current_node.add_child(ancestor)
                     self.current_node.excluded_from_sat.append(ancestor)
                     self.current_node = new_node
                     self.game.grid = new_node.grid.copy()
                 else:
-                    print("❌ No more ancestors (thread). Backtracking...")
+                    print("No more ancestors (thread). Backtracking...")
                     # with a probability of 33%, chose a random number between 1 and edpth and backtrack that many steps
                     if random.random() < 0.33:
                         steps = random.randint(1, self.current_node.depth)
+                        print(f"Backtracking {steps} steps (thread)")
                         for _ in range(steps):
                             if self.current_node.parent:
                                 self.current_node = self.current_node.parent
@@ -335,13 +337,14 @@ class TreeVisualizer:
                             else:
                                 break
                     else:
+                        print("Backtracking 1 step (thread)")
                         if self.current_node.parent:
                             self.current_node = self.current_node.parent
                             self.game.grid = self.current_node.grid.copy()
                         else:
                             print("🏁 Already at root, stopping search.")
-                        self.searching = False
-                        break
+                            self.searching = False
+                            break
             
             # Short sleep to prevent tight loop if SAT finishes instantly
             time.sleep(0.1)
