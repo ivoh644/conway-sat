@@ -369,6 +369,7 @@ class TreeVisualizer:
                 self.game.step()
                 new_node = Node(self.game.grid)
                 new_node.add_child_node(self.current_node)
+                self.current_node.parent = new_node
                 
                 # If the current node was a root, update the root list
                 if self.current_node in self.roots:
