@@ -266,14 +266,21 @@ class TreeVisualizer:
             self.screen.blit(label, (rect.x + 5, rect.y + 3))
 
     def go_deeper_step(self):
+        # If there are more than 4 children, backtrack right away
+        if len(self.current_node.children) > 4:
+            self.current_node = self.current_node.parent
+            self.game.grid = self.current_node.grid.copy()
+            return
+
         node = self.current_node
+        current_depth = node.depth
         print(f"Searching ancestor for node with {int(node.grid.sum())} cells...")
         
         # Attempt to find a NEW ancestor
         ancestor = solve_initial_minimal_iterative(
             node.grid,
             steps=1,
-            timeout_ms=2000, # Short timeout for interactivity
+            timeout_ms=10000*current_depth, # Short timeout for interactivity
             exclude_grids=node.excluded_from_sat
         )
         
@@ -457,4 +464,4 @@ class TreeVisualizer:
         pygame.quit()
 
 if __name__ == "__main__":
-    TreeVisualizer(w=40, h=40).run()
+    TreeVisualizer(w=80, h=80).run()
