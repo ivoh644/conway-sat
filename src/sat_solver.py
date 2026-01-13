@@ -80,6 +80,7 @@ def solve_initial_for_target(
     timeout_ms=10000,
     restrict=True,
     max_ones=500,
+    exclude_grids=None
 ):
     """
     IMPORTANT SEMANTICS (matches your old working version):
@@ -158,6 +159,18 @@ def solve_initial_for_target(
         #             ]
         #         )
         #     )
+
+    # Exclude specific grids from being returned as solutions for the initial layer
+    if exclude_grids:
+        for ex_grid in exclude_grids:
+            clause = []
+            for y in range(h):
+                for x in range(w):
+                    if ex_grid[y, x]:
+                        clause.append(Not(layers[0][y][x]))
+                    else:
+                        clause.append(layers[0][y][x])
+            s.add(Or(clause))
 
     print("🔍 Solving...")
 
