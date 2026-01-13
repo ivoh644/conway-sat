@@ -132,11 +132,10 @@ def solve_initial_for_target(
         # require at least one live cell in allowed region
         s.add(Or([layers[0][y][x] for (y, x) in allowed]))
 
-    # Exclude specific grids from being returned as solutions for the initial layer
     if exclude_grids:
         for ex_grid in exclude_grids:
             # Count the number of true values in the excluded grid
-            max_true = sum(sum(1 for cell in row if cell) for row in ex_grid)
+            max_true = int(ex_grid.sum())  # safe conversion to int
             if max_true == 0:
                 continue  # Skip empty grids
 
@@ -144,11 +143,11 @@ def solve_initial_for_target(
             mismatch_conditions = []
             for y in range(h):
                 for x in range(w):
-                    # True if layer[y][x] does NOT match ex_grid[y][x]
-                    mismatch_conditions.append(layers[0][y][x] != ex_grid[y][x])
+                    # Convert numpy int/bool to Python bool
+                    ex_cell = bool(ex_grid[y, x])
+                    mismatch_conditions.append(layers[0][y][x] != ex_cell)
 
             # Ensure less than 90% match of true values
-            # Number of mismatches must be at least 10% of max_true
             min_mismatches = int(max_true * 0.1) + 1
             s.add(Sum([If(cond, 1, 0) for cond in mismatch_conditions]) >= min_mismatches)
     
@@ -204,7 +203,8 @@ def solve_initial_minimal_iterative(
             
         best = sol
         ones = int(sol.sum())
-        bound = ones - 1
+        # THIS IS WACKY
+        bound = ones - random.randint(1, 3)
         print(f"\t found solution with {ones} live cells")
 
     if best is not None:

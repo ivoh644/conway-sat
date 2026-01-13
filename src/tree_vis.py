@@ -325,11 +325,21 @@ class TreeVisualizer:
                     self.game.grid = new_node.grid.copy()
                 else:
                     print("❌ No more ancestors (thread). Backtracking...")
-                    if self.current_node.parent:
-                        self.current_node = self.current_node.parent
-                        self.game.grid = self.current_node.grid.copy()
+                    # with a probability of 33%, chose a random number between 1 and edpth and backtrack that many steps
+                    if random.random() < 0.33:
+                        steps = random.randint(1, self.current_node.depth)
+                        for _ in range(steps):
+                            if self.current_node.parent:
+                                self.current_node = self.current_node.parent
+                                self.game.grid = self.current_node.grid.copy()
+                            else:
+                                break
                     else:
-                        print("🏁 Already at root, stopping search.")
+                        if self.current_node.parent:
+                            self.current_node = self.current_node.parent
+                            self.game.grid = self.current_node.grid.copy()
+                        else:
+                            print("🏁 Already at root, stopping search.")
                         self.searching = False
                         break
             
