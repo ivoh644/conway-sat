@@ -198,6 +198,7 @@ def solve_initial_minimal_iterative(
     steps=1,
     start_bound=600,
     timeout_ms=5000,
+    exclude_grids=None
 ):
     target = np.array(target, dtype=int)
     best = None
@@ -213,7 +214,8 @@ def solve_initial_minimal_iterative(
             steps=steps,
             max_ones=bound,
             timeout_ms=timeout_ms,
-            restrict=True
+            restrict=True,
+            exclude_grids=exclude_grids
         )
 
         if sol is None:

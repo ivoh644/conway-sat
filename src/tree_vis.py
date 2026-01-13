@@ -3,7 +3,7 @@ import numpy as np
 import os
 import datetime
 from game_of_life import GameOfLife
-from sat_solver import solve_initial_for_target
+from sat_solver import solve_initial_for_target, solve_initial_minimal_iterative
 
 CELL = 10
 FPS = 30
@@ -270,11 +270,10 @@ class TreeVisualizer:
         print(f"Searching ancestor for node with {int(node.grid.sum())} cells...")
         
         # Attempt to find a NEW ancestor
-        ancestor = solve_initial_for_target(
+        ancestor = solve_initial_minimal_iterative(
             node.grid,
             steps=1,
             timeout_ms=2000, # Short timeout for interactivity
-            max_ones=int(node.grid.sum()) + 50, # Allow some expansion
             exclude_grids=node.excluded_from_sat
         )
         
