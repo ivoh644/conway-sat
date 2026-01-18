@@ -143,7 +143,7 @@ def solve_initial_for_target(
 def solve_initial_minimal_iterative(
     target,
     steps=1,
-    start_bound=600,
+    start_bound=2500,
     timeout_ms=5000,
     exclude_grids=None
 ):
