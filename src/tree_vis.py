@@ -24,6 +24,10 @@ VIRIDIS_COLORS = [
     (33, 144, 141), (39, 173, 129), (92, 200, 99), (170, 220, 50), (253, 231, 37)
 ]
 
+WORKER_COLOR = (100, 150, 255)
+SELECTED_COLOR = (100, 255, 100)
+WORKER_SELECTED_COLOR = (100, 200, 255)
+
 def get_viridis_color(n_idx):
     # n_idx is number of neighbors (0-8)
     return VIRIDIS_COLORS[int(n_idx)]
@@ -97,10 +101,16 @@ class TreeVisualizer:
         self.clear_btn = pygame.Rect(290, 15, 60, 30)
         self.step_btn = pygame.Rect(360, 15, 60, 30)
         self.go_deeper_btn = pygame.Rect(430, 15, 100, 30)
+        self.scatter_btn = pygame.Rect(540, 15, 80, 30)
+        self.worker_dropdown_btn = pygame.Rect(630, 15, 120, 30)
 
         self.roots = [Node(self.game.grid)]
         self.current_node = self.roots[0]
+        self.num_workers = 1
+        self.worker_locations = [self.current_node]
+        self.search_threads = []
         self.config_files = []
+        self.showing_worker_dropdown = False
 
     def neighbors(self, grid):
         return sum(
@@ -192,12 +202,27 @@ class TreeVisualizer:
                 for child in node.children:
                     draw_nodes(child)
                 
-                color = (100, 255, 100) if node == self.current_node else (220, 220, 220)
+                is_worker_node = node in self.worker_locations
+                is_selected = node == self.current_node
+                
+                if is_selected and is_worker_node:
+                    color = WORKER_SELECTED_COLOR
+                elif is_selected:
+                    color = SELECTED_COLOR
+                elif is_worker_node:
+                    color = WORKER_COLOR
+                else:
+                    color = (220, 220, 220)
+
                 pygame.draw.rect(self.screen, color, node.rect, border_radius=max(1, int(5 * self.zoom_level)))
                 pygame.draw.rect(self.screen, (50, 50, 50), node.rect, max(1, int(1 * self.zoom_level)), border_radius=max(1, int(5 * self.zoom_level)))
                 
                 if self.zoom_level > 0.4:
-                    label = self.font.render(f"{int(node.grid.sum())}", True, (0, 0, 0))
+                    num_workers_here = self.worker_locations.count(node)
+                    label_str = f"{int(node.grid.sum())}"
+                    if num_workers_here > 0:
+                        label_str += f" ({num_workers_here}w)"
+                    label = self.font.render(label_str, True, (0, 0, 0))
                     self.screen.blit(label, (node.rect.x + (node.rect.w - label.get_width())//2, node.rect.y + (node.rect.h - label.get_height())//2))
                     
                     depth_label = self.depth_font.render(f"d:{node.depth}", True, (100, 100, 100))
@@ -230,12 +255,29 @@ class TreeVisualizer:
             (self.load_tree_btn, "Load T", (150, 200, 255)),
             (self.clear_btn, "Clear", (255, 200, 200)),
             (self.step_btn, "Step", (220, 220, 220)),
-            (self.go_deeper_btn, go_deeper_text, go_deeper_color)
+            (self.go_deeper_btn, go_deeper_text, go_deeper_color),
+            (self.scatter_btn, "Scatter", (200, 200, 255)),
+            (self.worker_dropdown_btn, f"Workers: {self.num_workers}", (220, 220, 255))
         ]:
             pygame.draw.rect(self.screen, color, btn, border_radius=5)
             pygame.draw.rect(self.screen, (0, 0, 0), btn, 1, border_radius=5)
             txt_surf = self.btn_font.render(text, True, (0, 0, 0))
             self.screen.blit(txt_surf, (btn.x + (btn.w - txt_surf.get_width())//2, btn.y + (btn.h - txt_surf.get_height())//2))
+
+    def draw_worker_dropdown(self):
+        if not self.showing_worker_dropdown:
+            return
+        
+        for i in range(1, 11):
+            rect = pygame.Rect(self.worker_dropdown_btn.x, self.worker_dropdown_btn.bottom + (i-1)*25, self.worker_dropdown_btn.w, 25)
+            pygame.draw.rect(self.screen, (240, 240, 240), rect)
+            pygame.draw.rect(self.screen, (0, 0, 0), rect, 1)
+            
+            if rect.collidepoint(pygame.mouse.get_pos()):
+                pygame.draw.rect(self.screen, (200, 220, 255), rect)
+            
+            label = self.font.render(f"{i} Workers", True, (0, 0, 0))
+            self.screen.blit(label, (rect.x + 5, rect.y + 5))
 
     def _scan_configs(self, extension=".npz"):
         path = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -277,23 +319,26 @@ class TreeVisualizer:
             label = self.font.render(name, True, (0, 0, 0))
             self.screen.blit(label, (rect.x + 5, rect.y + 3))
 
-    def search_worker(self):
+    def search_worker(self, worker_idx):
         """Background thread for the SAT solver."""
         while True:
             with self.lock:
                 if not self.searching:
                     break
-                node = self.current_node
+                if worker_idx >= len(self.worker_locations):
+                    break
+                node = self.worker_locations[worker_idx]
                 
                 if len(node.children) > 4:
-                    print("  " + colored("Too", "red") + " many branches, backtracking...")
+                    print(f"[{worker_idx}] " + colored("Too", "red") + " many branches, backtracking...")
                     if node.parent:
-                        self.current_node = node.parent
-                        self.game.grid = self.current_node.grid.copy()
+                        self.worker_locations[worker_idx] = node.parent
                         continue
                     else:
-                        print("  " + colored("Already", "red") + " at root, stopping search.")
-                        self.searching = False
+                        print(f"[{worker_idx}] " + colored("Already", "red") + " at root, stopping this worker.")
+                        # This worker stops but others might continue
+                        # Actually, better if we just wait or pick another node
+                        # For now, let's just break
                         break
                 
                 grid_copy = node.grid.copy()
@@ -312,30 +357,39 @@ class TreeVisualizer:
                     break
                 
                 if ancestor is not None:
-                    print("  " + colored("Found", "green") + " ancestor")
-                    new_node = self.current_node.add_child(ancestor)
-                    self.current_node.excluded_from_sat.append(ancestor)
-                    self.current_node = new_node
-                    self.game.grid = new_node.grid.copy()
+                    print(f"[{worker_idx}] " + colored("Found", "green") + " ancestor")
+                    new_node = self.worker_locations[worker_idx].add_child(ancestor)
+                    self.worker_locations[worker_idx].excluded_from_sat.append(ancestor)
+                    self.worker_locations[worker_idx] = new_node
+                    
+                    # If this worker was on current_node, update game grid
+                    if node == self.current_node:
+                        self.game.grid = new_node.grid.copy()
+                        self.current_node = new_node
                 else:
-                    print("  " + colored("No", "red") + " more ancestors, backtracking...")
+                    print(f"[{worker_idx}] " + colored("No", "red") + " more ancestors, backtracking...")
+                    curr = self.worker_locations[worker_idx]
                     if random.random() < 0.15:
-                        steps = random.randint(1, self.current_node.depth)
-                        print("  " + colored("Backtracking", "red") + f" {steps} steps")
+                        steps = random.randint(1, curr.depth)
+                        print(f"[{worker_idx}] " + colored("Backtracking", "red") + f" {steps} steps")
                         for _ in range(steps):
-                            if self.current_node.parent:
-                                self.current_node = self.current_node.parent
-                                self.game.grid = self.current_node.grid.copy()
+                            if curr.parent:
+                                curr = curr.parent
                             else:
                                 break
                     else:
-                        print("  " + colored("Backtracking", "red") + " 1 step")
-                        if self.current_node.parent:
-                            self.current_node = self.current_node.parent
-                            self.game.grid = self.current_node.grid.copy()
+                        print(f"[{worker_idx}] " + colored("Backtracking", "red") + " 1 step")
+                        if curr.parent:
+                            curr = curr.parent
                         else:
-                            self.searching = False
-                            break
+                            # If we hit root and no more ancestors, this worker is done or needs a new task
+                            # For now, just stop searching if it was the only one
+                            pass
+                    
+                    self.worker_locations[worker_idx] = curr
+                    if node == self.current_node:
+                        self.game.grid = curr.grid.copy()
+                        self.current_node = curr
             
             # Short sleep to prevent tight loop if SAT finishes instantly
             time.sleep(0.1)
@@ -344,9 +398,16 @@ class TreeVisualizer:
         with self.lock:
             self.searching = not self.searching
             if self.searching:
-                if self.search_thread is None or not self.search_thread.is_alive():
-                    self.search_thread = threading.Thread(target=self.search_worker, daemon=True)
-                    self.search_thread.start()
+                # Ensure worker_locations has enough slots
+                while len(self.worker_locations) < self.num_workers:
+                    self.worker_locations.append(self.current_node)
+                
+                # Start threads
+                self.search_threads = []
+                for i in range(self.num_workers):
+                    t = threading.Thread(target=self.search_worker, args=(i,), daemon=True)
+                    t.start()
+                    self.search_threads.append(t)
 
     def step_forward(self):
         with self.lock:
@@ -428,30 +489,54 @@ class TreeVisualizer:
                     with self.lock: self.searching = False
                 elif self.go_deeper_btn.collidepoint(mx, my):
                     self.toggle_search()
+                elif self.scatter_btn.collidepoint(mx, my):
+                    self.scatter_workers()
+                elif self.worker_dropdown_btn.collidepoint(mx, my):
+                    self.showing_worker_dropdown = not self.showing_worker_dropdown
+                elif self.showing_worker_dropdown:
+                    for i in range(1, 11):
+                        rect = pygame.Rect(self.worker_dropdown_btn.x, self.worker_dropdown_btn.bottom + (i-1)*25, self.worker_dropdown_btn.w, 25)
+                        if rect.collidepoint(mx, my):
+                            with self.lock:
+                                was_searching = self.searching
+                                if was_searching: self.toggle_search()
+                                self.num_workers = i
+                                self.worker_locations = self.worker_locations[:i]
+                                while len(self.worker_locations) < i:
+                                    self.worker_locations.append(self.current_node)
+                                if was_searching: self.toggle_search()
+                                self.showing_worker_dropdown = False
+                            break
+                    else:
+                        self.showing_worker_dropdown = False
                 else:
                     with self.lock:
                         is_searching = self.searching
                     
-                    if not is_searching:
-                        def check_nodes(node):
-                            if node.rect.collidepoint(mx, my):
-                                with self.lock:
-                                    self.current_node = node
-                                    self.game.grid = node.grid.copy()
-                                    self.searching = False 
-                                return True
-                            for child in node.children:
-                                if check_nodes(child): return True
-                            return False
-                        
-                        found = False
-                        for root in self.roots:
-                            if check_nodes(root):
-                                found = True
-                                break
-                        
-                        if not found:
-                            # Grid interaction
+                    def check_nodes(node):
+                        if node.rect.collidepoint(mx, my):
+                            with self.lock:
+                                self.current_node = node
+                                self.game.grid = node.grid.copy()
+                                # Flocking: when you click on a node, all workers flock there
+                                self.worker_locations = [node] * self.num_workers
+                                # self.searching = False # Don't stop searching if user clicks node?
+                                # Actually, user said "once go deeper is resumed" implies we might want to keep it running?
+                                # "all of the workers flock to that one cell and continue from there once go deeper is resumed"
+                                # This suggests if it was running, it should continue from there.
+                            return True
+                        for child in node.children:
+                            if check_nodes(child): return True
+                        return False
+                    
+                    found = False
+                    for root in self.roots:
+                        if check_nodes(root):
+                            found = True
+                            break
+                    
+                    if not found:
+                        # Grid interaction
                             gx, gy = mx // CELL, (my - TOP) // CELL
                             if 0 <= gx < self.w and 0 <= gy < self.h:
                                 with self.lock:
@@ -497,6 +582,19 @@ class TreeVisualizer:
                     self.zoom_level = 1.0
 
         return True
+
+    def scatter_workers(self):
+        with self.lock:
+            all_nodes = []
+            def collect(node):
+                all_nodes.append(node)
+                for c in node.children: collect(c)
+            for r in self.roots: collect(r)
+            
+            if not all_nodes: return
+            
+            self.worker_locations = [random.choice(all_nodes) for _ in range(self.num_workers)]
+            print(colored("Scattered", "blue") + f" {self.num_workers} workers")
 
     def save_grid(self):
         path = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -544,6 +642,8 @@ class TreeVisualizer:
 
             if self.loading:
                 self.draw_load_menu()
+            
+            self.draw_worker_dropdown()
             
             pygame.display.flip()
             self.clock.tick(FPS)
