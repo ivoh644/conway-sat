@@ -1,2 +1,5 @@
 numpy==2.3.4
 pygame==2.6.1
+z3-solver
+termcolor
+matplotlib
