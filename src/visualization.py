@@ -6,7 +6,7 @@ from matplotlib import cm
 
 from game_of_life import GameOfLife
 from sat_solver import solve_initial_for_target, solve_initial_minimal_iterative
-
+from termcolor import colored
 CELL = 12
 FPS = 15
 TOP = 50
@@ -49,7 +49,7 @@ class Visualizer:
 
         name = datetime.datetime.now().strftime("config_%Y%m%d_%H%M%S.npz")
         np.savez_compressed(os.path.join(path, name), grid=self.game.grid)
-        print("💾 Saved", name)
+        print(colored("Saved", "green", attrs=["bold"]) + f" {name}")
 
     def _scan_configs(self):
         path = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -57,14 +57,14 @@ class Visualizer:
             return []
         return sorted(
             f for f in os.listdir(path)
-            if f.startswith("config_") and f.endswith(".npz")
+            if f.endswith(".npz")
         )
 
     
     def open_load_menu(self):
         self.config_files = self._scan_configs()
         if not self.config_files:
-            print("⚠️ No saved configs found.")
+            print(colored("WARNING:", "yellow", attrs=["bold"]) + " No saved configs found.")
             return
         self.loading = True
     # ---------- drawing ----------
@@ -105,7 +105,6 @@ class Visualizer:
                     (self.game.width * CELL, y * CELL + TOP), 1
                 )
 
-        # buttons (still visible)
         pygame.draw.rect(self.screen, (200, 255, 200), self.save_btn)
         pygame.draw.rect(self.screen, (200, 220, 255), self.load_btn)
         self.screen.blit(self.font.render("Save", True, (0, 0, 0)), (28, 18))
@@ -158,20 +157,16 @@ class Visualizer:
                         self.game.grid = data["grid"].copy()
                         self.paused = True
                         self.loading = False
-                        print(f"📂 Loaded {self.config_files[idx]}")
+                        print(colored("Loaded", "green") + f" {self.config_files[idx]}")
 
-                continue  # ⬅️ IMPORTANT: skip normal handling
+                continue
 
-            # ---------------- NORMAL MODE ----------------
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_SPACE:
                     self.paused = not self.paused
 
                 elif e.key == pygame.K_b:
-                    print("🧠 Backward solve requested")
-                    print(f"   steps = 6")
-                    print(f"   live cells in target = {int(self.game.grid.sum())}")
-
+                    print(colored("Backward", "blue") + " solve requested")
                     sol = solve_initial_minimal_iterative(
                         self.game.grid,
                         steps=1,
@@ -180,19 +175,18 @@ class Visualizer:
                     )
 
                     if sol is not None:
-                        print("✅ Solution applied to grid")
+                        print(colored("Solution", "green", attrs=["bold"]) + " applied to grid")
                         self.game.grid = sol
                         self.paused = True
                     else:
-                        print("❌ No solution found")
+                        print(colored("No", "red", attrs=["bold"]) + " solution found")
                         
                 elif e.key == pygame.K_c:
-                    print("🧹 Clearing board")
                     self.game.grid[:] = 0
                     self.paused = True
                 
                 elif e.key == pygame.K_RIGHT:
-                    print("➡️ Stepping forward one generation")
+                    print(colored("Stepping", "blue") + " forward one generation")
                     self.game.step()
                     self.paused = True
 

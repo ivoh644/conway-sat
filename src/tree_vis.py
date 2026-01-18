@@ -7,6 +7,7 @@ import time
 from game_of_life import GameOfLife
 import random
 from sat_solver import solve_initial_for_target, solve_initial_minimal_iterative
+from termcolor import colored
 
 CELL = 10
 FPS = 30
@@ -17,7 +18,6 @@ DEAD = (255, 255, 255)
 ALIVE_COLOR = (40, 40, 40)
 HIGHLIGHT_COLOR = (255, 100, 100)
 
-# from matplotlib import cm  <-- Removed due to env issues
 VIRIDIS_COLORS = [
     (68, 1, 84), (71, 44, 122), (59, 81, 139), (44, 113, 142),
     (33, 144, 141), (39, 173, 129), (92, 200, 99), (170, 220, 50), (253, 231, 37)
@@ -88,14 +88,13 @@ class TreeVisualizer:
         self.tree_offset_y = 0
         self.zoom_level = 1.0
 
-        # Buttons
+        
         self.save_btn = pygame.Rect(10, 10, 50, 30)
         self.load_btn = pygame.Rect(70, 10, 50, 30)
         self.clear_btn = pygame.Rect(130, 10, 50, 30)
         self.step_btn = pygame.Rect(190, 10, 50, 30)
         self.go_deeper_btn = pygame.Rect(250, 10, 100, 30)
 
-        # Persistence: Multiple roots (forest)
         self.roots = [Node(self.game.grid)]
         self.current_node = self.roots[0]
         self.config_files = []
@@ -126,7 +125,6 @@ class TreeVisualizer:
                         (x * CELL, y * CELL + TOP, CELL, CELL),
                     )
 
-        # Grid lines
         for x in range(self.w + 1):
             pygame.draw.line(self.screen, GRID_COLOR, (x * CELL, TOP), (x * CELL, TOP + self.grid_height))
         for y in range(self.h + 1):
@@ -152,11 +150,10 @@ class TreeVisualizer:
                 return sum(get_width(c) for c in node.children)
 
             def layout(node, x, y):
-                # Apply offset and zoom for visual position
                 node.x = self.grid_width + (x + self.tree_offset_x) * self.zoom_level
                 node.y = (y + self.tree_offset_y) * self.zoom_level
                 
-                # Update node's internal rect for hit detection
+
                 node.rect.w = node_w
                 node.rect.h = node_h
                 node.rect.center = (node.x, node.y)
@@ -165,11 +162,8 @@ class TreeVisualizer:
                     return
                 
                 total_w = get_width(node)
-                curr_x = x - total_w // 2 / self.zoom_level # width_spacing is already scaled
+                curr_x = x - total_w // 2 / self.zoom_level
                 
-                # Correcting spacing: get_width returns scaled pixels. 
-                # We want to layout in "virtual" space then scale.
-                # Virtual width
                 def get_vwidth(node):
                     if not node.children: return 60
                     return sum(get_vwidth(c) for c in node.children)
@@ -181,7 +175,6 @@ class TreeVisualizer:
                     layout(child, curr_vx + cvw // 2, y + 60)
                     curr_vx += cvw
 
-            # Layout each root in virtual space
             vx_base = SIDEBAR_WIDTH // 2 / self.zoom_level
             for i, root in enumerate(self.roots):
                 layout(root, vx_base, 80 / self.zoom_level + i * 200)
@@ -201,11 +194,9 @@ class TreeVisualizer:
                 pygame.draw.rect(self.screen, (50, 50, 50), node.rect, max(1, int(1 * self.zoom_level)), border_radius=max(1, int(5 * self.zoom_level)))
                 
                 if self.zoom_level > 0.4:
-                    # Cell count
                     label = self.font.render(f"{int(node.grid.sum())}", True, (0, 0, 0))
                     self.screen.blit(label, (node.rect.x + (node.rect.w - label.get_width())//2, node.rect.y + (node.rect.h - label.get_height())//2))
                     
-                    # Depth display
                     depth_label = self.depth_font.render(f"d:{node.depth}", True, (100, 100, 100))
                     self.screen.blit(depth_label, (node.rect.right + 2, node.rect.y))
 
@@ -217,10 +208,8 @@ class TreeVisualizer:
         pygame.draw.line(self.screen, (150, 150, 150), (self.grid_width, 0), (self.grid_width, self.screen_h), 2)
 
     def draw_ui(self):
-        # Header background
         pygame.draw.rect(self.screen, (220, 220, 220), (0, 0, self.screen_w, TOP))
         
-        # Buttons
         with self.lock:
             searching = self.searching
 
@@ -249,13 +238,13 @@ class TreeVisualizer:
             return []
         return sorted(
             f for f in os.listdir(path)
-            if f.startswith("config_") and f.endswith(".npz")
+            if f.endswith(".npz")
         )
 
     def open_load_menu(self):
         self.config_files = self._scan_configs()
         if not self.config_files:
-            print("⚠️ No saved configs found.")
+            print(colored("WARNING:", "yellow", attrs=["bold"]) + " No saved configs found.")
             return
         self.loading = True
         with self.lock:
@@ -289,15 +278,14 @@ class TreeVisualizer:
                     break
                 node = self.current_node
                 
-                # USER logic: If more than 4 children, backtrack
                 if len(node.children) > 4:
-                    print("Too many branches, backtracking...")
+                    print("  " + colored("Too", "red") + " many branches, backtracking...")
                     if node.parent:
                         self.current_node = node.parent
                         self.game.grid = self.current_node.grid.copy()
                         continue
                     else:
-                        print("Already at root, stopping search.")
+                        print("  " + colored("Already", "red") + " at root, stopping search.")
                         self.searching = False
                         break
                 
@@ -305,31 +293,28 @@ class TreeVisualizer:
                 excluded_copy = [g.copy() for g in node.excluded_from_sat]
                 current_depth = node.depth
 
-            print(f"Searching ancestor for node with {int(grid_copy.sum())} cells (thread)...")
-            
-            # solve_initial_minimal_iterative is the bottleneck
             ancestor = solve_initial_minimal_iterative(
                 grid_copy,
                 steps=1,
-                timeout_ms=10000 * max(1, current_depth), # USER requested dynamic timeout
+                timeout_ms=10000 * max(1, current_depth),
                 exclude_grids=excluded_copy
             )
             
             with self.lock:
-                if not self.searching: break # Search was stopped while solving
+                if not self.searching:
+                    break
                 
                 if ancestor is not None:
-                    print("Found ancestor (thread)!")
+                    print("  " + colored("Found", "green") + " ancestor")
                     new_node = self.current_node.add_child(ancestor)
                     self.current_node.excluded_from_sat.append(ancestor)
                     self.current_node = new_node
                     self.game.grid = new_node.grid.copy()
                 else:
-                    print("No more ancestors (thread). Backtracking...")
-                    # with a probability of 33%, chose a random number between 1 and edpth and backtrack that many steps
+                    print("  " + colored("No", "red") + " more ancestors, backtracking...")
                     if random.random() < 0.15:
                         steps = random.randint(1, self.current_node.depth)
-                        print(f"Backtracking {steps} steps (thread)")
+                        print("  " + colored("Backtracking", "red") + f" {steps} steps")
                         for _ in range(steps):
                             if self.current_node.parent:
                                 self.current_node = self.current_node.parent
@@ -337,12 +322,11 @@ class TreeVisualizer:
                             else:
                                 break
                     else:
-                        print("Backtracking 1 step (thread)")
+                        print("  " + colored("Backtracking", "red") + " 1 step")
                         if self.current_node.parent:
                             self.current_node = self.current_node.parent
                             self.game.grid = self.current_node.grid.copy()
                         else:
-                            print("🏁 Already at root, stopping search.")
                             self.searching = False
                             break
             
@@ -358,7 +342,6 @@ class TreeVisualizer:
                     self.search_thread.start()
 
     def step_forward(self):
-        """Advance the simulation without resetting the tree."""
         with self.lock:
             if self.current_node.parent:
                 # If we are at an ancestor and step forward, move towards the future (root)
@@ -402,7 +385,7 @@ class TreeVisualizer:
                             self.searching = False
                         self.loading = False
                         self.paused = True
-                        print(f"📂 Loaded {self.config_files[idx]}")
+                        print(colored("Loaded", "green") + f" {self.config_files[idx]}")
                 continue
 
             # --- NORMAL MODE ---
@@ -429,17 +412,12 @@ class TreeVisualizer:
                     with self.lock:
                         is_searching = self.searching
                     
-                    if not is_searching: # USER: If searching, do not allow clicking on nodes
-                        # Check if node in tree clicked
+                    if not is_searching:
                         def check_nodes(node):
                             if node.rect.collidepoint(mx, my):
                                 with self.lock:
                                     self.current_node = node
                                     self.game.grid = node.grid.copy()
-                                    # Search is paused when clicking a node, or should it continue from there?
-                                    # The user said "Option to click on a node and it shows you that state. When clicking go deeper, it will start from there"
-                                    # So we keep self.searching as is? Or stop searching?
-                                    # If we are searching, we should probably pause so the user can see the state.
                                     self.searching = False 
                                 return True
                             for child in node.children:
@@ -465,15 +443,13 @@ class TreeVisualizer:
 
             if e.type == pygame.MOUSEWHEEL:
                 if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
-                    # Zoom
+                    
                     old_zoom = self.zoom_level
                     self.zoom_level *= (1.1 ** e.y)
                     self.zoom_level = max(0.1, min(self.zoom_level, 5.0))
                 elif keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
-                    # Horizontal scroll
                     self.tree_offset_x += e.y * 30 / self.zoom_level
                 else:
-                    # Vertical scroll
                     self.tree_offset_y += e.y * 30 / self.zoom_level
 
             if e.type == pygame.KEYDOWN:
@@ -509,7 +485,7 @@ class TreeVisualizer:
         with self.lock:
             grid_to_save = self.game.grid.copy()
         np.savez_compressed(os.path.join(path, name), grid=grid_to_save)
-        print("💾 Saved", name)
+        print(colored("Saved", "green", attrs=["bold"]) + f" {name}")
 
     def run(self):
         while True:

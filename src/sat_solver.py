@@ -1,9 +1,7 @@
 import numpy as np
 import random
 from z3 import Solver, Bool, Sum, If, And, Or, Not, is_true, sat
-
-
-# ---------- Game of Life transition ----------
+from termcolor import colored
 
 def make_bool_grid(prefix, h, w):
     return [[Bool(f"{prefix}_{y}_{x}") for x in range(w)] for y in range(h)]
@@ -34,19 +32,6 @@ def precompute_neighbors(h, w):
                         ns.append((ny, nx))
             neigh[(y, x)] = ns
     return neigh
-
-# def life_transition(s, curr, nxt, h, w):
-#     for y in range(h):
-#         for x in range(w):
-#             n = neighbors(curr, x, y, h, w)
-#             live = Sum([If(c, 1, 0) for c in n])
-#             s.add(
-#                 nxt[y][x]
-#                 == Or(
-#                     And(curr[y][x], Or(live == 2, live == 3)),
-#                     And(Not(curr[y][x]), live == 3),
-#                 )
-#             )
 
 def life_transition(s, curr, nxt, neigh):
     for (y, x), ns in neigh.items():
@@ -82,18 +67,9 @@ def solve_initial_for_target(
     max_ones=500,
     exclude_grids=None
 ):
-    """
-    IMPORTANT SEMANTICS (matches your old working version):
-    - Full grid is always used for ALL time steps
-    - Bounding box restriction applies ONLY to t=0
-    - Later layers are free to expand outside the window
-    """
     margin = steps
     target = np.array(target, dtype=int)
     h, w = target.shape
-
-    print("\t\tBuilding SAT instance")
-    print(f"\t\tgrid = {w}×{h}, steps = {steps}")
 
     layers = [make_bool_grid(f"t{t}", h, w) for t in range(steps + 1)]
 
@@ -102,7 +78,6 @@ def solve_initial_for_target(
         s.set("timeout", timeout_ms)
     s.set("random_seed", random.randint(0, 10000)) # for new boards
 
-    # transitions
     neigh = precompute_neighbors(h, w)
     
     for t in range(steps):
@@ -118,24 +93,19 @@ def solve_initial_for_target(
         Sum([layers[0][y][x] for y in range(h) for x in range(w)]) <= max_ones
     )
 
-    # restrict INITIAL layer only (this is the critical bit)
     if restrict:
         allowed = allowed_cells_from_target(target, steps, h, w)
-
-        print(f"\t\t restricting t=0 to {len(allowed)} possible ancestor cells")
 
         for y in range(h):
             for x in range(w):
                 if (y, x) not in allowed:
                     s.add(layers[0][y][x] == False)
 
-        # require at least one live cell in allowed region
         s.add(Or([layers[0][y][x] for (y, x) in allowed]))
 
     if exclude_grids:
         for ex_grid in exclude_grids:
-            # Count the number of true values in the excluded grid
-            max_true = int(ex_grid.sum())  # safe conversion to int
+            max_true = int(ex_grid.sum())
             if max_true == 0:
                 continue  # Skip empty grids
 
@@ -143,7 +113,6 @@ def solve_initial_for_target(
             mismatch_conditions = []
             for y in range(h):
                 for x in range(w):
-                    # Convert numpy int/bool to Python bool
                     ex_cell = bool(ex_grid[y, x])
                     mismatch_conditions.append(layers[0][y][x] != ex_cell)
 
@@ -151,13 +120,13 @@ def solve_initial_for_target(
             min_mismatches = int(max_true * 0.1) + 1
             s.add(Sum([If(cond, 1, 0) for cond in mismatch_conditions]) >= min_mismatches)
     
-    print("\t\tSolving...")
+    print("  " + colored("Solving", "blue") + "...")
 
     if s.check() != sat:
-        print("\t\tUNSAT")
+        print("    " + colored("UNSAT", "red", attrs=["bold"]))
         return None
 
-    print("\t\tSAT — extracting model")
+    print("    " + colored("SAT", "green") + " - extracting model")
 
     m = s.model()
     init = np.zeros((h, w), dtype=int)
@@ -167,7 +136,6 @@ def solve_initial_for_target(
             v = m.evaluate(layers[0][y][x], model_completion=True)
             init[y, x] = 1 if is_true(v) else 0
 
-    print(f"\t\tInitial live cells: {int(init.sum())}")
     return init
 
 
@@ -183,10 +151,10 @@ def solve_initial_minimal_iterative(
     best = None
     bound = start_bound
 
-    print("Starting iterative minimization")
+    print(colored("Starting", "blue") + " iterative minimization")
 
     while bound >= 0:
-        print(f"\t trying max_ones ≤ {bound}")
+        print("  " + colored("trying", "blue") + f" max_ones <= {bound}")
 
         sol = solve_initial_for_target(
             target,
@@ -198,18 +166,18 @@ def solve_initial_minimal_iterative(
         )
 
         if sol is None:
-            print("\t UNSAT at this bound")
+            print("    " + colored("UNSAT", "red") + " at this bound")
             break
             
         best = sol
         ones = int(sol.sum())
         # THIS IS WACKY
         bound = ones - random.randint(1, 3)
-        print(f"\t found solution with {ones} live cells")
+        print("    " + colored("found", "green") + f" solution with {ones} live cells")
 
     if best is not None:
-        print(f"Optimal solution has {int(best.sum())} live cells")
+        print("  " + colored("Optimal", "green", attrs=["bold"]) + f" solution has {int(best.sum())} live cells")
     else:
-        print("No solution found at any bound")
+        print(colored("No", "red", attrs=["bold"]) + " solution found at any bound")
 
     return best
