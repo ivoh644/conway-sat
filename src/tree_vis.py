@@ -9,6 +9,9 @@ import random
 from sat_solver import solve_initial_for_target, solve_initial_minimal_iterative
 from termcolor import colored
 import pickle
+import sys
+
+sys.setrecursionlimit(5000)
 
 CELL = 10
 FPS = 30
@@ -157,16 +160,20 @@ class TreeVisualizer:
         width_spacing = int(60 * self.zoom_level)
 
         with self.lock:
+            cached_widths = {}
             def get_width(node):
+                if node in cached_widths: return cached_widths[node]
                 if not node.children:
-                    return width_spacing
-                return sum(get_width(c) for c in node.children)
+                    w = width_spacing
+                else:
+                    w = sum(get_width(c) for c in node.children)
+                cached_widths[node] = w
+                return w
 
             def layout(node, x, y):
                 node.x = self.grid_width + (x + self.tree_offset_x) * self.zoom_level
                 node.y = (y + self.tree_offset_y) * self.zoom_level
                 
-
                 node.rect.w = node_w
                 node.rect.h = node_h
                 node.rect.center = (node.x, node.y)
@@ -174,17 +181,11 @@ class TreeVisualizer:
                 if not node.children:
                     return
                 
-                total_w = get_width(node)
-                curr_x = x - total_w // 2 / self.zoom_level
+                total_w = get_width(node) / self.zoom_level
+                curr_vx = x - total_w // 2
                 
-                def get_vwidth(node):
-                    if not node.children: return 60
-                    return sum(get_vwidth(c) for c in node.children)
-                
-                vw = get_vwidth(node)
-                curr_vx = x - vw // 2
                 for child in node.children:
-                    cvw = get_vwidth(child)
+                    cvw = get_width(child) / self.zoom_level
                     layout(child, curr_vx + cvw // 2, y + 60)
                     curr_vx += cvw
 

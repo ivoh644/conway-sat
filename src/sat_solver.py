@@ -6,8 +6,8 @@ import threading
 
 _z3_lock = threading.Lock()
 
-def make_bool_grid(prefix, h, w):
-    return [[Bool(f"{prefix}_{y}_{x}") for x in range(w)] for y in range(h)]
+def make_bool_grid(prefix, h, w, ctx=None):
+    return [[Bool(f"{prefix}_{y}_{x}", ctx=ctx) for x in range(w)] for y in range(h)]
 
 
 def neighbors(grid, x, y, h, w):
@@ -36,7 +36,7 @@ def precompute_neighbors(h, w):
             neigh[(y, x)] = ns
     return neigh
 
-def life_transition(s, curr, nxt, neigh):
+def life_transition(s, curr, nxt, neigh, ctx=None):
     for (y, x), ns in neigh.items():
         live = Sum([If(curr[ny][nx], 1, 0) for ny, nx in ns])
         s.add(
@@ -65,82 +65,91 @@ def allowed_cells_from_target(target, steps, h, w):
 def solve_initial_for_target(
     target,
     steps=1,
-    timeout_ms=10000,
+    timeout_ms=1000,
     restrict=True,
     max_ones=500,
     exclude_grids=None
 ):
-    with _z3_lock:
-        margin = steps
-        target = np.array(target, dtype=int)
-        h, w = target.shape
+    ctx = threading.local()
+    if not hasattr(ctx, 'z3_ctx'):
+        import z3
+        ctx.z3_ctx = z3.Context()
+    
+    c = ctx.z3_ctx
+    
+    # We need to re-import Z3 helpers to use them with the specific context
+    # but actually we can just pass the context to the constructors.
+    
+    margin = steps
+    target = np.array(target, dtype=int)
+    h, w = target.shape
 
-        layers = [make_bool_grid(f"t{t}", h, w) for t in range(steps + 1)]
+    layers = [make_bool_grid(f"t{t}", h, w, ctx=c) for t in range(steps + 1)]
 
-        s = Solver()
-        if timeout_ms:
-            s.set("timeout", timeout_ms)
-        s.set("random_seed", random.randint(0, 10000)) # for new boards
+    s = Solver(ctx=c)
+    if timeout_ms:
+        s.set("timeout", timeout_ms)
+    s.set("random_seed", random.randint(0, 10000)) # for new boards
 
-        neigh = precompute_neighbors(h, w)
-        
-        for t in range(steps):
-            life_transition(s, layers[t], layers[t + 1], neigh)
+    neigh = precompute_neighbors(h, w)
+    
+    for t in range(steps):
+        life_transition(s, layers[t], layers[t + 1], neigh, ctx=c)
 
-        # fix final state
+    # fix final state
+    for y in range(h):
+        for x in range(w):
+            s.add(layers[steps][y][x] == bool(target[y, x]))
+
+    # limit initial population
+    s.add(
+        Sum([layers[0][y][x] for y in range(h) for x in range(w)]) <= max_ones
+    )
+
+    if restrict:
+        allowed = allowed_cells_from_target(target, steps, h, w)
+
         for y in range(h):
             for x in range(w):
-                s.add(layers[steps][y][x] == bool(target[y, x]))
+                if (y, x) not in allowed:
+                    s.add(layers[0][y][x] == False)
 
-        # limit initial population
-        s.add(
-            Sum([layers[0][y][x] for y in range(h) for x in range(w)]) <= max_ones
-        )
+        s.add(Or([layers[0][y][x] for (y, x) in allowed]))
 
-        if restrict:
-            allowed = allowed_cells_from_target(target, steps, h, w)
+    if exclude_grids:
+        for ex_grid in exclude_grids:
+            max_true = int(ex_grid.sum())
+            if max_true == 0:
+                continue  # Skip empty grids
 
+            # Create a list of conditions for each cell
+            mismatch_conditions = []
             for y in range(h):
                 for x in range(w):
-                    if (y, x) not in allowed:
-                        s.add(layers[0][y][x] == False)
+                    ex_cell = bool(ex_grid[y, x])
+                    mismatch_conditions.append(layers[0][y][x] != ex_cell)
 
-            s.add(Or([layers[0][y][x] for (y, x) in allowed]))
+            # Ensure less than 90% match of true values
+            min_mismatches = int(max_true * 0.1) + 1
+            s.add(Sum([If(cond, 1, 0) for cond in mismatch_conditions]) >= min_mismatches)
+    
+    print("  " + colored("Solving", "blue") + "...")
 
-        if exclude_grids:
-            for ex_grid in exclude_grids:
-                max_true = int(ex_grid.sum())
-                if max_true == 0:
-                    continue  # Skip empty grids
+    if s.check() != sat:
+        print("    " + colored("UNSAT", "red", attrs=["bold"]))
+        return None
 
-                # Create a list of conditions for each cell
-                mismatch_conditions = []
-                for y in range(h):
-                    for x in range(w):
-                        ex_cell = bool(ex_grid[y, x])
-                        mismatch_conditions.append(layers[0][y][x] != ex_cell)
+    print("    " + colored("SAT", "green") + " - extracting model")
 
-                # Ensure less than 90% match of true values
-                min_mismatches = int(max_true * 0.1) + 1
-                s.add(Sum([If(cond, 1, 0) for cond in mismatch_conditions]) >= min_mismatches)
-        
-        print("  " + colored("Solving", "blue") + "...")
+    m = s.model()
+    init = np.zeros((h, w), dtype=int)
 
-        if s.check() != sat:
-            print("    " + colored("UNSAT", "red", attrs=["bold"]))
-            return None
+    for y in range(h):
+        for x in range(w):
+            v = m.evaluate(layers[0][y][x], model_completion=True)
+            init[y, x] = 1 if is_true(v) else 0
 
-        print("    " + colored("SAT", "green") + " - extracting model")
-
-        m = s.model()
-        init = np.zeros((h, w), dtype=int)
-
-        for y in range(h):
-            for x in range(w):
-                v = m.evaluate(layers[0][y][x], model_completion=True)
-                init[y, x] = 1 if is_true(v) else 0
-
-        return init
+    return init
 
 
 
