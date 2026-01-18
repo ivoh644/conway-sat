@@ -25,7 +25,7 @@ Ta projekt implementira Conwayjevo Igro Življenja z funkcionalnostjo **povratne
 
 ### Kaj je Conwayjeva Igra Življenja?
 
-Conwayjeva Igra Življenja je celični avtomat, ki ga je leta 1970 razvil matematik John Conway. Deluje na dvodimenzionalni mreži celic, kjer vsaka celica lahko biti živa (1) ali mrtva (0). Simulacija poteka v diskretnih generacijah, kjer se stanje vsake celice določi na podlagi njenih osmih sosedov.
+Conwayjeva Igra Življenja je celični avtomat, ki ga je leta 1970 razvil matematik John Conway. Deluje na dvodimenzionalni mreži celic, kjer vsaka celica lahko je živa (1) ali mrtva (0). Simulacija poteka v diskretnih generacijah, kjer se stanje vsake celice določi na podlagi njenih osmih sosedov.
 
 ### Pravila
 
