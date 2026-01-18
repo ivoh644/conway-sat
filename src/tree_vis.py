@@ -13,7 +13,7 @@ import pickle
 CELL = 10
 FPS = 30
 TOP = 60
-SIDEBAR_WIDTH = 400
+SIDEBAR_WIDTH = 800
 GRID_COLOR = (200, 200, 200)
 DEAD = (255, 255, 255)
 ALIVE_COLOR = (40, 40, 40)
@@ -97,6 +97,7 @@ class TreeVisualizer:
         self.clear_btn = pygame.Rect(290, 15, 60, 30)
         self.step_btn = pygame.Rect(360, 15, 60, 30)
         self.go_deeper_btn = pygame.Rect(430, 15, 100, 30)
+        self.rerender_btn = pygame.Rect(540, 15, 100, 30)
 
         self.roots = [Node(self.game.grid)]
         self.current_node = self.roots[0]
@@ -230,7 +231,8 @@ class TreeVisualizer:
             (self.load_tree_btn, "Load T", (150, 200, 255)),
             (self.clear_btn, "Clear", (255, 200, 200)),
             (self.step_btn, "Step", (220, 220, 220)),
-            (self.go_deeper_btn, go_deeper_text, go_deeper_color)
+            (self.go_deeper_btn, go_deeper_text, go_deeper_color),
+            (self.rerender_btn, "Rerender", (200, 200, 255))
         ]:
             pygame.draw.rect(self.screen, color, btn, border_radius=5)
             pygame.draw.rect(self.screen, (0, 0, 0), btn, 1, border_radius=5)
@@ -319,7 +321,7 @@ class TreeVisualizer:
                     self.game.grid = new_node.grid.copy()
                 else:
                     print("  " + colored("No", "red") + " more ancestors, backtracking...")
-                    if random.random() < 0.15:
+                    if random.random() < 0.20:
                         steps = random.randint(1, self.current_node.depth)
                         print("  " + colored("Backtracking", "red") + f" {steps} steps")
                         for _ in range(steps):
@@ -428,6 +430,11 @@ class TreeVisualizer:
                     with self.lock: self.searching = False
                 elif self.go_deeper_btn.collidepoint(mx, my):
                     self.toggle_search()
+                elif self.rerender_btn.collidepoint(mx, my):
+                    with self.lock:
+                        self.tree_offset_x = 0
+                        self.tree_offset_y = 0
+                        self.zoom_level = 1.0
                 else:
                     with self.lock:
                         is_searching = self.searching
