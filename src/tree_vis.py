@@ -316,7 +316,7 @@ class TreeVisualizer:
                     self.game.grid = new_node.grid.copy()
                 else:
                     print("  " + colored("No", "red") + " more ancestors, backtracking...")
-                    if random.random() < 0.15:
+                    if random.random() < 0.08 * len(self.current_node.parent.children):
                         steps = random.randint(1, self.current_node.depth)
                         print("  " + colored("Backtracking", "red") + f" {steps} steps")
                         for _ in range(steps):
@@ -325,7 +325,7 @@ class TreeVisualizer:
                                 self.game.grid = self.current_node.grid.copy()
                             else:
                                 break
-                    elif random.random() < 0.1:
+                    elif random.random() < 0.05 * len(self.current_node.parent.children):
                         print("  " + colored("Random Jump", "yellow") + " to a random node")
                         all_nodes = []
                         stack = list(self.roots)
@@ -347,8 +347,21 @@ class TreeVisualizer:
                             self.current_node = self.current_node.parent
                             self.game.grid = self.current_node.grid.copy()
                         else:
-                            self.searching = False
-                            break
+                            print("  " + colored("Random Jump", "yellow") + " to a random node")
+                            all_nodes = []
+                            stack = list(self.roots)
+                            while stack:
+                                n = stack.pop()
+                                all_nodes.append(n)
+                                stack.extend(n.children)
+                            if all_nodes:
+                                self.current_node = random.choice(all_nodes)
+                                self.game.grid = self.current_node.grid.copy()
+                            else:
+                                # Fallback
+                                if self.current_node.parent:
+                                    self.current_node = self.current_node.parent
+                                    self.game.grid = self.current_node.grid.copy()
             
             # Short sleep to prevent tight loop if SAT finishes instantly
             time.sleep(0.1)
