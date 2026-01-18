@@ -8,6 +8,7 @@ from game_of_life import GameOfLife
 import random
 from sat_solver import solve_initial_for_target, solve_initial_minimal_iterative
 from termcolor import colored
+import pickle
 
 CELL = 10
 FPS = 30
@@ -89,11 +90,13 @@ class TreeVisualizer:
         self.zoom_level = 1.0
 
         
-        self.save_btn = pygame.Rect(10, 10, 50, 30)
-        self.load_btn = pygame.Rect(70, 10, 50, 30)
-        self.clear_btn = pygame.Rect(130, 10, 50, 30)
-        self.step_btn = pygame.Rect(190, 10, 50, 30)
-        self.go_deeper_btn = pygame.Rect(250, 10, 100, 30)
+        self.save_grid_btn = pygame.Rect(10, 15, 60, 30)
+        self.load_grid_btn = pygame.Rect(80, 15, 60, 30)
+        self.save_tree_btn = pygame.Rect(150, 15, 60, 30)
+        self.load_tree_btn = pygame.Rect(220, 15, 60, 30)
+        self.clear_btn = pygame.Rect(290, 15, 60, 30)
+        self.step_btn = pygame.Rect(360, 15, 60, 30)
+        self.go_deeper_btn = pygame.Rect(430, 15, 100, 30)
 
         self.roots = [Node(self.game.grid)]
         self.current_node = self.roots[0]
@@ -221,8 +224,10 @@ class TreeVisualizer:
             go_deeper_color = (255, 255, 100)
 
         for btn, text, color in [
-            (self.save_btn, "Save", (200, 255, 200)),
-            (self.load_btn, "Load", (200, 220, 255)),
+            (self.save_grid_btn, "Save G", (200, 255, 200)),
+            (self.load_grid_btn, "Load G", (200, 220, 255)),
+            (self.save_tree_btn, "Save T", (150, 255, 150)),
+            (self.load_tree_btn, "Load T", (150, 200, 255)),
             (self.clear_btn, "Clear", (255, 200, 200)),
             (self.step_btn, "Step", (220, 220, 220)),
             (self.go_deeper_btn, go_deeper_text, go_deeper_color)
@@ -232,19 +237,21 @@ class TreeVisualizer:
             txt_surf = self.btn_font.render(text, True, (0, 0, 0))
             self.screen.blit(txt_surf, (btn.x + (btn.w - txt_surf.get_width())//2, btn.y + (btn.h - txt_surf.get_height())//2))
 
-    def _scan_configs(self):
+    def _scan_configs(self, extension=".npz"):
         path = os.path.join(os.path.dirname(__file__), "..", "data")
         if not os.path.isdir(path):
             return []
         return sorted(
             f for f in os.listdir(path)
-            if f.endswith(".npz")
+            if f.endswith(extension)
         )
 
-    def open_load_menu(self):
-        self.config_files = self._scan_configs()
+    def open_load_menu(self, mode="grid"):
+        self.load_mode = mode # "grid" or "tree"
+        ext = ".npz" if mode == "grid" else ".tree.pkl"
+        self.config_files = self._scan_configs(ext)
         if not self.config_files:
-            print(colored("WARNING:", "yellow", attrs=["bold"]) + " No saved configs found.")
+            print(colored("WARNING:", "yellow", attrs=["bold"]) + f" No saved {mode} configs found.")
             return
         self.loading = True
         with self.lock:
@@ -376,13 +383,22 @@ class TreeVisualizer:
                     idx = (my - 50) // 24
                     if 0 <= idx < len(self.config_files):
                         path = os.path.join(os.path.dirname(__file__), "..", "data", self.config_files[idx])
-                        data = np.load(path)
-                        with self.lock:
-                            self.game.grid = data["grid"].copy()
-                            new_root = Node(self.game.grid)
-                            self.roots.append(new_root) # Add as new disconnected root
-                            self.current_node = new_root
-                            self.searching = False
+                        if self.load_mode == "grid":
+                            data = np.load(path)
+                            with self.lock:
+                                self.game.grid = data["grid"].copy()
+                                new_root = Node(self.game.grid)
+                                self.roots.append(new_root) # Add as new disconnected root
+                                self.current_node = new_root
+                                self.searching = False
+                        else:
+                            with open(path, "rb") as f:
+                                data = pickle.load(f)
+                            with self.lock:
+                                self.roots = data["roots"]
+                                self.current_node = data["current_node"]
+                                self.game.grid = self.current_node.grid.copy()
+                                self.searching = False
                         self.loading = False
                         self.paused = True
                         print(colored("Loaded", "green") + f" {self.config_files[idx]}")
@@ -392,10 +408,14 @@ class TreeVisualizer:
             if e.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = pygame.mouse.get_pos()
                 
-                if self.save_btn.collidepoint(mx, my):
-                    self.save_config()
-                elif self.load_btn.collidepoint(mx, my):
-                    self.open_load_menu()
+                if self.save_grid_btn.collidepoint(mx, my):
+                    self.save_grid()
+                elif self.load_grid_btn.collidepoint(mx, my):
+                    self.open_load_menu(mode="grid")
+                elif self.save_tree_btn.collidepoint(mx, my):
+                    self.save_tree()
+                elif self.load_tree_btn.collidepoint(mx, my):
+                    self.open_load_menu(mode="tree")
                 elif self.clear_btn.collidepoint(mx, my):
                     with self.lock:
                         self.game.grid[:] = 0
@@ -460,7 +480,7 @@ class TreeVisualizer:
                 elif e.key == pygame.K_b:
                     self.toggle_search()
                 elif e.key == pygame.K_s:
-                    self.save_config()
+                    self.save_grid()
                 elif e.key == pygame.K_c:
                     with self.lock:
                         self.game.grid[:] = 0
@@ -478,14 +498,31 @@ class TreeVisualizer:
 
         return True
 
-    def save_config(self):
+    def save_grid(self):
         path = os.path.join(os.path.dirname(__file__), "..", "data")
         os.makedirs(path, exist_ok=True)
-        name = datetime.datetime.now().strftime("config_%Y%m%d_%H%M%S.npz")
+        name = datetime.datetime.now().strftime("grid_%Y%m%d_%H%M%S.npz")
         with self.lock:
             grid_to_save = self.game.grid.copy()
         np.savez_compressed(os.path.join(path, name), grid=grid_to_save)
-        print(colored("Saved", "green", attrs=["bold"]) + f" {name}")
+        print(colored("Saved Grid", "green", attrs=["bold"]) + f" {name}")
+
+    def save_tree(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "data")
+        os.makedirs(path, exist_ok=True)
+        name = datetime.datetime.now().strftime("tree_%Y%m%d_%H%M%S.tree.pkl")
+        with self.lock:
+            # We save roots and current_node reference. 
+            # Note: pickle might hit recursion depth for very large trees.
+            data = {
+                "roots": self.roots,
+                "current_node": self.current_node,
+                "w": self.w,
+                "h": self.h
+            }
+        with open(os.path.join(path, name), "wb") as f:
+            pickle.dump(data, f)
+        print(colored("Saved Tree", "green", attrs=["bold"]) + f" {name}")
 
     def run(self):
         while True:
