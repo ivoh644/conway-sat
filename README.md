@@ -320,10 +320,10 @@ Barve so iz palete Viridis, ki omogoča dobro razlikovanje različnih gostot.
 
 ### Primer Drevesne Vizualizacije
 
-Spodaj je prikazan primer najkompleksnejše vizualizacije - drevesnega iskanja prednikov. Ta animacija prikazuje, kako program avtomatsko raziskuje možne prednike konfiguracije, gradijo se veje drevesa, ki predstavljajo različne možne zgodovine stanj. To je najnaprednejša funkcionalnost projekta, ki omogoča razumevanje kompleksnih odnosov med različnimi generacijami Conwayjeve Igre Življenja.
+Spodaj je prikazan primer najkompleksnejše vizualizacije - drevesnega iskanja prednikov. Ta animacija prikazuje, kako program avtomatsko raziskuje možne prednike konfiguracije, gradijo se veje drevesa, ki predstavljajo različne možne zgodovine stanj. To je najnaprednejša funkcionalnost projekta, ki omogoča razumevanje kompleksnih odnosov med različnimi generacijami Conwayjeve Igre Življenja. Za boljši prikaz pritisnite na GIF.
 
 <div align="center">
-  <img src="primer_tree.gif" alt="Primer drevesne vizualizacije" width="70%">
+  <img src="primer_tree.gif" alt="Primer drevesne vizualizacije" width="85%">
 </div>
 
 ## Primeri Uporabe
